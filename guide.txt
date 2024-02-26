@@ -1,0 +1,6 @@
+git init 
+git remote add origin https://github.com/lizagoeva/sensor_blinding.git
+git pull https://github.com/lizagoeva/sensor_blinding.git
+git add .
+git commit -m "Message"
+git push origin master
