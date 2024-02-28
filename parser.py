@@ -1,4 +1,5 @@
 import re
+from random import randint
 
 
 def parse_snort_rule(rule):
@@ -21,11 +22,25 @@ def parse_snort_rules(rules_file, protocol, port, host):
     for rule in rules:
         parsed_rule = parse_snort_rule(rule)
         if parsed_rule:
-            # Проверка соответствия заданным параметрам
+            # Проверка по протоколу и destiination_port
             if (parsed_rule["protocol"] == protocol and
-                ("any" in parsed_rule["source_port"] or
-                (len(parsed_rule["source_port"].split(":")) > 1 and parsed_rule["source_port"].split(":")[1] == str(port))) and
-                parsed_rule["destination_address"] == host):
+                parsed_rule["destination_address"] == host and
+                ("any" in parsed_rule["destination_port"] or
+                parsed_rule["destination_port"] == str(port) or
+                len(parsed_rule["destination_port"].split(":")) > 1 and 
+                parsed_rule["destination_port"].split(":")[1] == str(port))):
+                
+                # Проверка по source_port
+                if "any" in parsed_rule["source_port"]:
+                    parsed_rule["source_port"] = str(randint(1234, 65535))
+
+                if type(parsed_rule["source_port"]) is not int:
+                    if type(parsed_rule["source_port"].strip('[]').split(',')) is list:
+                        parsed_rule["source_port"] = parsed_rule["source_port"].strip('[]').split(",")[0]
+
+                    elif len(parsed_rule["source_port"].split(":")) > 1:
+                        parsed_rule["source_port"] = parsed_rule["source_port"].split(":")[1]
+
                 parsed_rules.append(parsed_rule)
 
     return parsed_rules
@@ -33,7 +48,7 @@ def parse_snort_rules(rules_file, protocol, port, host):
 # Пример использования
 rules_file = "community.rules"
 protocol = "tcp"
-port = 2589
+port = 22
 host = "$EXTERNAL_NET"
 
 filtered_rules = parse_snort_rules(rules_file, protocol, port, host)
