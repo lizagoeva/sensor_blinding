@@ -1,5 +1,6 @@
 import re
 from random import randint
+from log_conf import parser_logger
 
 
 def parse_snort_rule(rule):
@@ -44,8 +45,12 @@ def parse_snort_rules(rules_file, protocol, host, port):
                         parsed_rule["source_port"] = parsed_rule["source_port"].split(":")[1]
 
                 parsed_rules.append(parsed_rule)
-
+                
+    keys = ['rules_file', 'protocol', 'host', 'port', 'rules', 'parsed_rules']
+    values = [rules_file, protocol, host, port, len(rules), len(parsed_rules)]
+    parser_logger(dict(zip(keys,values)))
     return parsed_rules
+
 
 # Пример использования
 # rules_file = "community.rules"
