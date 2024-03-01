@@ -1,12 +1,27 @@
 import json
 import re
+from random import choice
 
 RULE_PARAMS = 'content', 'flags'
+# alert <protocol> <source_address> <source_port> -> <destination_address> <destination_port> <extra_params>
+SNORT_RE = re.compile(
+    r'^alert (\w+) (\$\w+|any|[\d.]+) (any|[$\w:\[\],]+) [-<]> (\$\w+|any|[\d.]+) (any|[$\w:\[\],]+) \((.*)\)'
+)
+SNORT_RULES_FILENAME = 'community.rules'
+with open('sensor_blinding_config.json', 'r') as conf_file:
+    SNORT_VARIABLES = json.load(conf_file)['data']['snort_vars']
+
+# todo
+#  1) создать файлик с конфигами снорта (json с переменными снорта $HOME_NET, $HTTPS_PORTS и тд),
+#  вытягивать из строки правила снорта перемнную, и далее при генерации словаря подставлять туда соответствующее
+#  значение из конфига и в словарь их и подставлять
+#  2) если content встречается более 1 раза то скипаем его
+#  3) если в контенте есть восклицательный знак (перед кавычками после двоеточия!!) то его тоже скипать
 
 
-def msg_parser(msg: str):
+def extra_data_parser(data_string: str):
     result_attrs = dict()
-    for item in [_.removesuffix(';') for _ in msg.split('; ')]:
+    for item in [_.removesuffix(';') for _ in data_string.split('; ')]:
         if ':' in item and item.split(':')[0] in RULE_PARAMS:
             k, v = [string.strip('"') for string in item.split(':')]
             if k in result_attrs:
@@ -17,7 +32,7 @@ def msg_parser(msg: str):
             else:
                 result_attrs[k] = v
             if len(result_attrs[k]) == 3:
-                print(f'3: {msg}')
+                print(f'3: {data_string}')
         elif item in RULE_PARAMS:
             result_attrs[item] = True
     print(result_attrs)
@@ -26,32 +41,70 @@ def msg_parser(msg: str):
     # print(f'flags: {flags_count}')
 
 
-snort_re = re.compile(r'^alert (\w+) (\$EXTERNAL_NET|\$HOME_NET|any|[\d.]+) (any|\d+|[\d:]+) [-<]> (\$EXTERNAL_NET|\$HOME_NET|any|[\d.]+) (any|\d+|[\d:]+) \((.*)\)')
-data = [
-    'alert tcp 10.1.1.1 30100:30102 -> 1.1.1.1 any (msg:"MALWARE-BACKDOOR NetSphere access"; flow:established,to_client; content:"NetSphere"; metadata:ruleset community; classtype:trojan-activity; sid:146; rev:13;)',
-    'alert tcp any 6969 -> 255.255.255.255 any (msg:"MALWARE-BACKDOOR GateCrasher"; flow:established,to_client; content:"GateCrasher"; depth:11; nocase; content:"Server"; distance:0; nocase; content:"On-Line..."; distance:0; nocase; pcre:"/^GateCrasher\s+v\d+\x2E\d+\x2C\s+Server\s+On-Line\x2E\x2E\x2E/smi"; metadata:policy max-detect-ips drop, ruleset community; reference:url,www.spywareguide.com/product_show.php?id=973; classtype:trojan-activity; sid:147; rev:12;)',
-    'alert tcp any any -> any any (msg:"MALWARE-BACKDOOR BackConstruction 2.1 Connection"; flow:established,to_client; content:"c|3A 5C|"; metadata:ruleset community; classtype:misc-activity; sid:152; rev:11;)',
-    'alert tcp 127.0.0.1 any -> any 666 (msg:"MALWARE-BACKDOOR BackConstruction 2.1 Client FTP Open Request"; flow:to_server,established; content:"FTPON"; metadata:ruleset community; classtype:misc-activity; sid:157; rev:9;)',
-    'alert tcp 1.1.1.1 any <> 23.23.23.23 179 (msg:"SERVER-OTHER BGP spoofed connection reset attempt"; flow:established,no_stream; flags:RSF*; detection_filter:track by_dst,count 10,seconds 10; metadata:ruleset community; reference:bugtraq,10183; reference:cve,2004-0230; reference:url,www.uniras.gov.uk/vuls/2004/236929/index.htm; classtype:attempted-dos; sid:2523; rev:15;)',
-    'alert tcp any 5714 -> any any (msg:"MALWARE-BACKDOOR WinCrash 1.0 Server Active"; flow:stateless; flags:SA,12; content:"|B4 B4|"; metadata:ruleset community; classtype:misc-activity; sid:163; rev:14;)',
-    'alert tcp any any -> 2.3.4.5 25 (msg:"SERVER-MAIL sniffit overflow"; flow:to_server,established; isdataat:512; flags:A+; content:"from|3A 90 90 90 90 90 90 90 90 90 90 90|"; nocase; metadata:ruleset community, service smtp; reference:bugtraq,1158; reference:cve,2000-0343; classtype:attempted-admin; sid:309; rev:17;)',
-]
-for i in data:
-    res = re.search(snort_re, i)
-    if res:
-        res = res.groups()
-        print(res)
-        result = {
-            'protocol': res[0],
-            'destination_address': res[1],
-            'destination_port': res[2],
-            'source_port': res[4],
-            'params': msg_parser(res[-1]),
-        }
-    else:
-        print(f'нет совпадений - {i}')
-    # if res:
-    #     print(res.groups())
-    #     # msg_parser(res.groups()[-1])
-    # else:
-    #     print('совпадений не найдено\n')
+def replace_snort_variables(parameters: list):
+    print(f'исходные параметры: {parameters}')
+    for param_num in (1, 2, 3, 4):
+        param_separated = parameters[param_num].strip('[]')
+        param_separated = param_separated.split(',')
+        if len(param_separated) > 1:
+            for i in range(len(param_separated)):
+                if param_separated[i] in SNORT_VARIABLES.keys():
+                    param_separated[i] = SNORT_VARIABLES[param_separated[i]]
+                    if isinstance(param_separated[i], list):
+                        param_separated.extend(param_separated[i])
+                        del param_separated[i]
+            parameters[param_num] = choice(param_separated)
+        elif str(param_separated[0]) in SNORT_VARIABLES.keys():
+            parameters[param_num] = SNORT_VARIABLES[param_separated[0]]
+    print(f'полученные параметры: {parameters}')
+    quit()
+
+    # todo реализовать логику подстановки значений вместо переменных
+    #  (для форматов как $HOME_NET, так и [$HTTP_PORTS,3000,5156,7218])
+    pass
+
+
+# todo проверки -> оставляем правило, иначе скипаем
+#  (
+#  1) исходит из ext net (source = externalnet)
+#  or
+#  2) source = "any"
+#  )
+#  and
+#  (
+#  3) цель - любая из переменных кроме external net
+#  or
+#  4) цель - "any"
+#  )
+
+
+def snort_rules_parser():
+    rules_parsed_full = []
+    with open(SNORT_RULES_FILENAME, 'r') as f:
+        for rule in f.readlines():
+            if not rule.startswith('alert'):
+                continue
+            parsed_items = re.search(SNORT_RE, rule)
+            if not parsed_items:
+                print(f'совпадений не найдено: {rule}')
+                continue
+            parsed_items = parsed_items.groups()
+            if (parsed_items[])
+            replace_snort_variables(list(parsed_items))
+
+    return rules_parsed_full
+
+
+# todo передавать флаги посимвольно
+#  модификаторы во флагах
+#  + - игнорировать
+#  * - игнорировать
+#  ! - убрать 1 букву перед ! (SA! -> S)
+#  , - всё после запятой игнорировать
+
+snort_rules_parser()
+
+# todo total
+#  1) подстановка переменных
+#  2) парсинг флагов (см выше)
+#  3) парсинг контента
