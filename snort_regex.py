@@ -15,18 +15,20 @@ with open('sensor_blinding_config.json', 'r') as conf_file:
     SNORT_VARIABLES = json.load(conf_file)['data']['snort_vars']
 
 
-def handle_parameters(parameters: list) -> list:
+def handle_parameters(parameters: list) -> list | None:
     for param_num in (1, 2, 3, 4):
         param_separated = parameters[param_num].strip('[]')
         param_separated = param_separated.split(',')
         if len(param_separated) > 1:
             for i in range(len(param_separated)):
-                # todo обработать случай когда встречается переменная снорта, но в конфигах её нет
                 if param_separated[i] in SNORT_VARIABLES.keys():
                     param_separated[i] = SNORT_VARIABLES[param_separated[i]]
                     if isinstance(param_separated[i], list):
                         param_separated.extend(param_separated[i])
                         del param_separated[i]
+                elif isinstance(param_separated[i], str) and re.match(re.compile(r'\$\w+'), param_separated[i]):
+                    print(f'Обнаружена неизвестная snort-переменная {param_separated[i]} среди параметров {parameters}')
+                    return None
         elif str(param_separated[0]) in SNORT_VARIABLES.keys():
             parameters[param_num] = SNORT_VARIABLES[param_separated[0]]
         if isinstance(parameters[param_num], list):
@@ -114,11 +116,11 @@ def snort_rules_parser() -> dict:
         for rule in f.readlines():
             if not rule.startswith('alert'):
                 continue
-            parsed_items: re.Match = re.search(SNORT_RE, rule)
+            parsed_items = re.search(SNORT_RE, rule)
             if not parsed_items:
                 print(f'совпадений не найдено: {rule}')
                 continue
-            parsed_items: tuple = parsed_items.groups()
+            parsed_items = parsed_items.groups()
 
             source_check = parsed_items[1] in ('$EXTERNAL_NET', 'any')
             destination_check = parsed_items[3] != '$EXTERNAL_NET' or parsed_items[3] == 'any'
@@ -126,13 +128,15 @@ def snort_rules_parser() -> dict:
             if not (source_check and destination_check and content_check):
                 continue
 
-            parsed_items: list = handle_parameters(list(parsed_items))
+            parsed_items = handle_parameters(list(parsed_items))
+            if not parsed_items:
+                continue
             parsed_items[-1] = raw_data_parser(parsed_items[-1])
 
             yield dict(zip(PARAMETERS_DICT_KEYS, parsed_items))
 
 
-for i in snort_rules_parser():
+for r in snort_rules_parser():
     pass
 
-# todo перспективы развития: отрицательные distance (вместе с модификаторами контента - */+/!)
+# Перспективы развития: отрицательные distance (вместе с модификаторами контента - */+/!)
