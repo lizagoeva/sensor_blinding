@@ -14,9 +14,6 @@ SNORT_RULES_FILENAME = 'community.rules'
 with open('sensor_blinding_config.json', 'r') as conf_file:
     SNORT_VARIABLES = json.load(conf_file)['data']['snort_vars']
 
-# todo
-#  3) если в контенте есть восклицательный знак (перед кавычками после двоеточия!!) то скипать правило
-
 
 def handle_parameters(parameters: list) -> list:
     for param_num in (1, 2, 3, 4):
@@ -86,7 +83,7 @@ def handle_content(content_data: dict) -> str:
         if key == 'offset':
             value = int(value)
             result_content = '\\x00' * (value - len(result_content) // 4 + current_content_bytes_num) + result_content
-        elif key == 'distance':  # 3
+        elif key == 'distance':
             value = int(value)
             insert_index = (len(result_content) // 4 - current_content_bytes_num) * 4
             result_content = result_content[:insert_index] + '\\x00' * value + result_content[insert_index:]
@@ -125,7 +122,8 @@ def snort_rules_parser() -> dict:
 
             source_check = parsed_items[1] in ('$EXTERNAL_NET', 'any')
             destination_check = parsed_items[3] != '$EXTERNAL_NET' or parsed_items[3] == 'any'
-            if not (source_check and destination_check):
+            content_check = 'content:!"' not in parsed_items[-1]
+            if not (source_check and destination_check and content_check):
                 continue
 
             parsed_items: list = handle_parameters(list(parsed_items))
