@@ -16,8 +16,9 @@
       "$SMTP_SERVERS": "any"
     },
     "config": {
-      "target_ip": "",
-      "use_interface": ""
+      "target_ip": "10.10.10.2",
+      "use_interface": "",
+      "logging_level": "info"
     }
   }
 }
