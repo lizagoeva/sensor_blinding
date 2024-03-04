@@ -1,6 +1,7 @@
 import json
 import re
 from random import choice, randint
+from logger import *
 
 TCP_FLAGS = 'fsrpau21'
 VALUABLE_PARAMS = 'content', 'flags'
@@ -11,8 +12,14 @@ SNORT_RE = re.compile(
     r'^alert (\w+) (\$\w+|any|[\d.]+) (any|[$\w:\[\],]+) [-<]> (\$\w+|any|[\d.]+) (any|[$\w:\[\],]+) \((.*)\)'
 )
 SNORT_RULES_FILENAME = 'community.rules'
-with open('sensor_blinding_config.json', 'r') as conf_file:
-    SNORT_VARIABLES = json.load(conf_file)['data']['snort_vars']
+CONFIG_FILENAME = 'sensor_blinding_config.json'
+try:
+    with open(CONFIG_FILENAME, 'r') as conf_file:
+        SNORT_VARIABLES = json.load(conf_file)['data']['snort_vars']
+except Exception as err:
+    clog('An error has occurred while loading config', LOG_ERROR)
+    clog(f'Error message: {err}', LOG_ERROR)
+    # todo чи шо делать?
 
 
 def handle_parameters(parameters: list) -> list | None:
@@ -27,7 +34,10 @@ def handle_parameters(parameters: list) -> list | None:
                         param_separated.extend(param_separated[i])
                         del param_separated[i]
                 elif isinstance(param_separated[i], str) and re.match(re.compile(r'\$\w+'), param_separated[i]):
-                    print(f'Обнаружена неизвестная snort-переменная {param_separated[i]} среди параметров {parameters}')
+                    clog(
+                        f'Found unknown snort variable: {param_separated[i]}. Parameters list: {parameters}',
+                        LOG_WARN,
+                    )
                     return None
         elif str(param_separated[0]) in SNORT_VARIABLES.keys():
             parameters[param_num] = SNORT_VARIABLES[param_separated[0]]
@@ -78,7 +88,6 @@ def raw_data_parser(data_string: str) -> dict:
 
 
 def handle_content(content_data: dict) -> str:
-
     result_content = ''
     current_content_bytes_num = 0
     for key, value in content_data.items():
@@ -106,12 +115,14 @@ def handle_content(content_data: dict) -> str:
             if value < current_content_bytes_num:
                 result_content = result_content[:(4 * (current_content_bytes_num - value))]
         else:
-            print(f'Неожиданный элемент в словаре контента: {key} -> {value}')
+            clog(f'Unexpected item in content data: {key} -> {value}', LOG_WARN)
 
     return result_content
 
 
 def snort_rules_parser() -> dict:
+    # configure_logging('logs/run.log', 'info')
+
     with open(SNORT_RULES_FILENAME, 'r') as f:
         for rule in f.readlines():
             if not rule.startswith('alert'):
@@ -133,6 +144,7 @@ def snort_rules_parser() -> dict:
                 continue
             parsed_items[-1] = raw_data_parser(parsed_items[-1])
 
+            clog(f'Rule {rule!r} parsed into items: {parsed_items}', LOG_INFO)
             yield dict(zip(PARAMETERS_DICT_KEYS, parsed_items))
 
 
