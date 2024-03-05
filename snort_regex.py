@@ -141,12 +141,15 @@ def snort_rules_parser(filename: str, protocol: str, ipaddr: str, port: str) -> 
                 continue
 
             # filters check
-            protocol_check = parsed_items[0] in (protocol, 'any')
-            ip_check = parsed_items[3] in (ipaddr, 'any')
-            if not (protocol_check and ip_check and port_filter_match(parsed_items[4], port)):
+            protocol_check = protocol in (parsed_items[0], 'any')
+
+            if not (protocol_check and port_filter_match(parsed_items[4], port)):
                 continue
+            clog("Rule passed filter!", LOG_INFO)
+            clog(f"Rule: {parsed_items}", LOG_INFO)
+            parsed_items[2] = parsed_items[2] if parsed_items[2] != 'any' else randint(0, 65535)
             parsed_items[3] = ipaddr if ipaddr != 'any' else CONFIG_DATA['target_ip']
-            parsed_items[4] = port if port != 'any' else randint(0, 65535)
+            parsed_items[4] = parsed_items[4] if parsed_items[4] != 'any' else randint(0, 65535)
             parsed_items[-1] = raw_data_parser(parsed_items[-1])
 
             yield dict(zip(PARAMETERS_DICT_KEYS, parsed_items))

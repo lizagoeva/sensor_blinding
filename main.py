@@ -105,10 +105,10 @@ def main():
     dst_ip = args.dst_ip
     dst_port = args.dst_port
 
+    print(args, protocol, dst_ip, dst_port)
+
     for parsed in snort_regex.snort_rules_parser(snort_rules_filename, protocol, dst_ip, dst_port):
         print(parsed)
-        if parsed['dst_ip'] == 'any':
-            parsed['dst_ip'] = config_data['target_ip']
         crafter = packet_crafter.PacketCrafter()
         content = parsed['raw']['content']
         crafter.craft(
@@ -118,9 +118,9 @@ def main():
             src_port=parsed['src_port'],
             content=bytes.fromhex(content.replace('\\x', '')) if content else None
         )
-        print(crafter.packet)
-        print(hexdump(crafter.packet))
-        sendp(crafter.packet, iface='eth0')
+        clog(f"Packet: {crafter.packet}: ", LOG_INFO)
+        clog(hexdump(crafter.packet), LOG_INFO)
+        sendp(crafter.packet, iface=config_data['use_interface'])
 
 
 if __name__ == "__main__":

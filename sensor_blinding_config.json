@@ -20,6 +20,6 @@
       "use_interface": "eth0",
       "logging_level": "info"
     },
-    "rules_filename": "community.rules"
+    "rules_filename": "test.rules"
   }
 }
