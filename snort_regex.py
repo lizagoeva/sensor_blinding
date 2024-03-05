@@ -72,7 +72,7 @@ def raw_data_parser(data_string: str) -> dict:
                 if '!' in v:
                     tcp_flags = [f ^ 1 for f in tcp_flags]
             elif k in CONTENT_MODIFIERS:
-                contents_data[k] = v
+                contents_data[k + str(content_num)] = v
             elif k in VALUABLE_PARAMS:
                 result_attrs[k] = v
         elif item in VALUABLE_PARAMS:
@@ -88,10 +88,10 @@ def handle_content(content_data: dict) -> str:
     result_content = ''
     current_content_bytes_num = 0
     for key, value in content_data.items():
-        if key == 'offset':
+        if 'offset' in key:
             value = int(value)
             result_content = '\\x00' * (value - len(result_content) // 4 + current_content_bytes_num) + result_content
-        elif key == 'distance':
+        elif 'distance' in key:
             value = int(value)
             insert_index = (len(result_content) // 4 - current_content_bytes_num) * 4
             result_content = result_content[:insert_index] + '\\x00' * value + result_content[insert_index:]
@@ -107,7 +107,7 @@ def handle_content(content_data: dict) -> str:
                     for symbol in content_separated[chunk_num]:
                         result_content += ('\\x' + '%02x' % ord(symbol))
                         current_content_bytes_num += 1
-        elif key == 'depth':
+        elif 'depth' in key:
             value = int(value)
             if value < current_content_bytes_num:
                 result_content = result_content[:(4 * (current_content_bytes_num - value))]
@@ -140,7 +140,6 @@ def snort_rules_parser(filename: str) -> dict:
             content_check = 'content:!"' not in parsed_items[-1]
             if not (source_check and destination_check and content_check):
                 continue
-            # print(parsed_items)
 
             # filters check
             protocol_check = parsed_items[0] == protocol
