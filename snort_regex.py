@@ -11,7 +11,7 @@ CONTENT_MODIFIERS = 'depth', 'distance', 'offset'
 SNORT_RE = re.compile(
     r'^alert (\w+) (\$\w+|any|[\d.]+) (any|[$\w:\[\],]+) [-<]> (\$\w+|any|[\d.]+) (any|[$\w:\[\],]+) \((.*)\)'
 )
-SNORT_RULES_FILENAME = 'community.rules'
+PARSED_RULES_NUM = 0
 CONFIG_FILENAME = 'sensor_blinding_config.json'
 try:
     with open(CONFIG_FILENAME, 'r') as conf_file:
@@ -120,16 +120,16 @@ def handle_content(content_data: dict) -> str:
     return result_content
 
 
-def snort_rules_parser() -> dict:
-    # configure_logging('logs/run.log', 'info')
+def snort_rules_parser(filename: str) -> dict:
+    global PARSED_RULES_NUM
 
-    with open(SNORT_RULES_FILENAME, 'r') as f:
+    with open(filename, 'r') as f:
         for rule in f.readlines():
             if not rule.startswith('alert'):
                 continue
             parsed_items = re.search(SNORT_RE, rule)
             if not parsed_items:
-                print(f'совпадений не найдено: {rule}')
+                clog(f'Rule does not match regex: {rule}', LOG_WARN)
                 continue
             parsed_items = parsed_items.groups()
 
@@ -138,17 +138,19 @@ def snort_rules_parser() -> dict:
             content_check = 'content:!"' not in parsed_items[-1]
             if not (source_check and destination_check and content_check):
                 continue
+            # print(parsed_items)
 
             parsed_items = handle_parameters(list(parsed_items))
             if not parsed_items:
                 continue
             parsed_items[-1] = raw_data_parser(parsed_items[-1])
 
-            clog(f'Rule {rule!r} parsed into items: {parsed_items}', LOG_INFO)
             yield dict(zip(PARAMETERS_DICT_KEYS, parsed_items))
+            PARSED_RULES_NUM += 1
+    clog(f'{PARSED_RULES_NUM} rules parsed successfully!', LOG_INFO)
 
 
-for r in snort_rules_parser():
-    pass
+# for i in snort_rules_parser('community.rules'):
+#     ...
 
 # Перспективы развития: отрицательные distance (вместе с модификаторами контента - */+/!)
