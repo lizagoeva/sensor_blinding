@@ -13,7 +13,7 @@ class PacketCrafter:
         network_layer_address_src = []
         network_layer_address_src.extend(destination_addr.split(":"))
 
-        self.packet_add_l1()
+        self.packet_add_l2()
 
         self.packet_add_l3(dst_ip=network_layer_address_src[0])
 
