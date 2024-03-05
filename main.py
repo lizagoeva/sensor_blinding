@@ -1,7 +1,7 @@
 import json
-from scapy.all import *
 import fcntl
-import os
+import argparse
+from scapy.all import *
 
 import packet_crafter
 from logger import *
@@ -95,7 +95,17 @@ def auto_interface():
 def main():
     configure_logging(LOGFILE, LOG_LEVEL)
     config_data, snort_vars, snort_rules_filename = parse_config()
-    for parsed in snort_regex.snort_rules_parser(filename=snort_rules_filename):
+
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('--protocol', default='any', dest='protocol', help='Transfer protocol')
+    arg_parser.add_argument('--dst-ip', default='any', dest='dst_ip', help='Destination IP-address')
+    arg_parser.add_argument('--dst-port', default='any', dest='dst_port', help='Destination port')
+    args = arg_parser.parse_args()
+    protocol = args.protocol
+    dst_ip = args.dst_ip
+    dst_port = args.dst_port
+
+    for parsed in snort_regex.snort_rules_parser(snort_rules_filename, protocol, dst_ip, dst_port):
         print(parsed)
         if parsed['dst_ip'] == 'any':
             parsed['dst_ip'] = config_data['target_ip']

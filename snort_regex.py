@@ -1,5 +1,7 @@
 import json
 import re
+from random import randint
+
 from logger import *
 
 TCP_FLAGS = 'fsrpau21'
@@ -14,15 +16,17 @@ PARSED_RULES_NUM = 0
 CONFIG_FILENAME = 'sensor_blinding_config.json'
 try:
     with open(CONFIG_FILENAME, 'r') as conf_file:
-        SNORT_VARIABLES = json.load(conf_file)['data']['snort_vars']
+        FULL_CONFIG = json.load(conf_file)['data']
+        SNORT_VARIABLES = FULL_CONFIG['snort_vars']
+        CONFIG_DATA = FULL_CONFIG['config']
 except Exception as err:
     clog('An error has occurred while loading config', LOG_ERROR)
     clog(f'Error message: {err}', LOG_ERROR)
     # todo чи шо делать?
 
 
-def port_filter_match(port_str: str, port_value: int) -> bool:
-    if port_str == 'any':
+def port_filter_match(port_str: str, port_value: int | str) -> bool:
+    if port_str == 'any' or port_value == 'any':
         return True
     ports_separated = port_str.strip('[]')
     ports_separated = ports_separated.split(',')
@@ -117,13 +121,8 @@ def handle_content(content_data: dict) -> str:
     return result_content
 
 
-def snort_rules_parser(filename: str) -> dict:
+def snort_rules_parser(filename: str, protocol: str, ipaddr: str, port: str) -> dict:
     global PARSED_RULES_NUM
-
-    # todo аргументы из консоли
-    protocol = 'tcp'
-    ipaddr = '10.10.10.10'
-    port = 22
 
     with open(filename, 'r') as f:
         for rule in f.readlines():
@@ -142,15 +141,12 @@ def snort_rules_parser(filename: str) -> dict:
                 continue
 
             # filters check
-            protocol_check = parsed_items[0] == protocol
-            ip_check = parsed_items[3] in ('any', ipaddr)
+            protocol_check = parsed_items[0] in (protocol, 'any')
+            ip_check = parsed_items[3] in (ipaddr, 'any')
             if not (protocol_check and ip_check and port_filter_match(parsed_items[4], port)):
                 continue
-            parsed_items[3], parsed_items[4] = ipaddr, port
-
-            # parsed_items = handle_parameters(list(parsed_items))
-            # if not parsed_items:
-            #     continue
+            parsed_items[3] = ipaddr if ipaddr != 'any' else CONFIG_DATA['target_ip']
+            parsed_items[4] = port if port != 'any' else randint(0, 65535)
             parsed_items[-1] = raw_data_parser(parsed_items[-1])
 
             yield dict(zip(PARAMETERS_DICT_KEYS, parsed_items))
