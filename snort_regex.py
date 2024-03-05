@@ -1,6 +1,5 @@
 import json
 import re
-from random import choice, randint
 from logger import *
 
 TCP_FLAGS = 'fsrpau21'
@@ -22,36 +21,34 @@ except Exception as err:
     # todo чи шо делать?
 
 
-def handle_parameters(parameters: list) -> list | None:
-    for param_num in (1, 2, 3, 4):
-        param_separated = parameters[param_num].strip('[]')
-        param_separated = param_separated.split(',')
-        if len(param_separated) > 1:
-            for i in range(len(param_separated)):
-                if param_separated[i] in SNORT_VARIABLES.keys():
-                    param_separated[i] = SNORT_VARIABLES[param_separated[i]]
-                    if isinstance(param_separated[i], list):
-                        param_separated.extend(param_separated[i])
-                        del param_separated[i]
-                elif isinstance(param_separated[i], str) and re.match(re.compile(r'\$\w+'), param_separated[i]):
-                    clog(
-                        f'Found unknown snort variable: {param_separated[i]}. Parameters list: {parameters}',
-                        LOG_WARN,
-                    )
-                    return None
-        elif str(param_separated[0]) in SNORT_VARIABLES.keys():
-            parameters[param_num] = SNORT_VARIABLES[param_separated[0]]
-        if isinstance(parameters[param_num], list):
-            parameters[param_num] = choice(parameters[param_num])
-        elif ':' in parameters[param_num] and param_num in (2, 4):
-            if parameters[param_num][-1] == ':':
-                start, end = int(parameters[param_num][:-1]), 65535
+def port_filter_match(port_str: str, port_value: int) -> bool:
+    if port_str == 'any':
+        return True
+    ports_separated = port_str.strip('[]')
+    ports_separated = ports_separated.split(',')
+    for port in ports_separated:
+        if port in SNORT_VARIABLES.keys():
+            port = SNORT_VARIABLES[port]
+            if isinstance(port, list):
+                for item in port:
+                    if isinstance(item, int) and item == port_value:
+                        return True
+            elif isinstance(port, int) and port == port_value:
+                return True
+        elif isinstance(port, str) and re.match(re.compile(r'\$\w+'), port):
+            clog(f'Found unknown snort variable: {port}', LOG_WARN)
+            return False
+        elif ':' in port:
+            if port[-1] == ':':
+                port_range = range(int(port[:-1]), 65536)
             else:
-                start, end = [int(x) for x in parameters[param_num].split(':')]
-            parameters[param_num] = randint(start, end)
-        elif parameters[param_num] == 'any' and param_num in (2, 4):
-            parameters[param_num] = randint(0, 65535)
-    return parameters
+                start, end = map(int, port.split(':'))
+                port_range = range(start, end + 1)
+            if port_value in port_range:
+                return True
+        elif port.isdigit() and int(port) == port_value:
+            return True
+        return False
 
 
 def raw_data_parser(data_string: str) -> dict:
@@ -123,6 +120,11 @@ def handle_content(content_data: dict) -> str:
 def snort_rules_parser(filename: str) -> dict:
     global PARSED_RULES_NUM
 
+    # todo аргументы из консоли
+    protocol = 'tcp'
+    ipaddr = '10.10.10.10'
+    port = 22
+
     with open(filename, 'r') as f:
         for rule in f.readlines():
             if not rule.startswith('alert'):
@@ -131,7 +133,7 @@ def snort_rules_parser(filename: str) -> dict:
             if not parsed_items:
                 clog(f'Rule does not match regex: {rule}', LOG_WARN)
                 continue
-            parsed_items = parsed_items.groups()
+            parsed_items = list(parsed_items.groups())
 
             source_check = parsed_items[1] in ('$EXTERNAL_NET', 'any')
             destination_check = parsed_items[3] != '$EXTERNAL_NET' or parsed_items[3] == 'any'
@@ -140,9 +142,16 @@ def snort_rules_parser(filename: str) -> dict:
                 continue
             # print(parsed_items)
 
-            parsed_items = handle_parameters(list(parsed_items))
-            if not parsed_items:
+            # filters check
+            protocol_check = parsed_items[0] == protocol
+            ip_check = parsed_items[3] in ('any', ipaddr)
+            if not (protocol_check and ip_check and port_filter_match(parsed_items[4], port)):
                 continue
+            parsed_items[3], parsed_items[4] = ipaddr, port
+
+            # parsed_items = handle_parameters(list(parsed_items))
+            # if not parsed_items:
+            #     continue
             parsed_items[-1] = raw_data_parser(parsed_items[-1])
 
             yield dict(zip(PARAMETERS_DICT_KEYS, parsed_items))
@@ -151,6 +160,6 @@ def snort_rules_parser(filename: str) -> dict:
 
 
 # for i in snort_rules_parser('community.rules'):
-#     ...
+#     print(i)
 
 # Перспективы развития: отрицательные distance (вместе с модификаторами контента - */+/!)
