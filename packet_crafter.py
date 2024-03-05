@@ -22,7 +22,7 @@ class PacketCrafter:
 
         self.packet_add_load(content)
 
-    def packet_add_l1(self): self.packet = Ether()
+    def packet_add_l2(self): self.packet = Ether()
 
     def packet_add_l3(self, dst_ip: str): self.packet /= IP(dst=dst_ip)
 
