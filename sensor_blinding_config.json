@@ -16,10 +16,10 @@
       "$SMTP_SERVERS": "any"
     },
     "config": {
-      "target_ip": "10.10.10.2",
+      "target_ip": "192.168.1.138",
       "use_interface": "",
       "logging_level": "info"
     },
-    "rules_filename": "community.rules"
+    "rules_filename": "test.rules"
   }
 }

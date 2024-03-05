@@ -6,22 +6,19 @@ class PacketCrafter:
         self.packet = None
         self.packet_list = []
 
-    def craft(self, proto: str = None, destination_addr: str = None, flags: str = None, content: str = None):
+    def craft(self, proto: str = None, destination_addr: str = None, src_port: str = None, flags: str = None, content: str = None):
         if not destination_addr:
             return -1
 
         network_layer_address_src = []
         network_layer_address_src.extend(destination_addr.split(":"))
 
-        # network_layer_address_dst = []
-        # network_layer_address_dst.extend(source_addr.split(":"))
-
         self.packet_add_l1()
 
         self.packet_add_l3(dst_ip=network_layer_address_src[0])
 
         if len(network_layer_address_src) > 1:
-            self.packet_add_l4(proto=proto, dst_port=network_layer_address_src[1], src_port="22", flags=flags if flags else '')
+            self.packet_add_l4(proto=proto, dst_port=network_layer_address_src[1], src_port=src_port, flags=flags if flags else None)
 
         self.packet_add_load(content)
 
@@ -35,7 +32,7 @@ class PacketCrafter:
             try:
                 self.packet /= TCP(dport=int(dst_port), sport=int(src_port), flags=flags)
                 return 0
-            except Exception as err:  # todo парсинг портов
+            except Exception as err:
                 print(err)
                 print(dst_port)
         elif proto_lowcase == 'udp':
@@ -49,19 +46,5 @@ class PacketCrafter:
             return 0
         return 1
 
-    def packet_add_load(self, load: str):
-        self.packet /= Raw(load=load)
-
-
-# test branch
-# test
-# здесь была лизобчка
-
-# def main() -> None:
-#     crafter = PacketCrafter()
-#     crafter.craft(proto='tcp', destination_addr='10.10.10.10:53')
-#     print(crafter.packet)
-#
-#
-# if __name__ == "__main__":
-#     main()
+    def packet_add_load(self, load):
+        self.packet /= Raw(load)
